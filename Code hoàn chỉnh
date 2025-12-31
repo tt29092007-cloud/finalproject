@@ -1,0 +1,256 @@
+import pygame
+import sys
+import random
+import os
+import cv2
+import mediapipe as mp
+import numpy as np
+mp_draw = mp.solutions.drawing_utils
+
+pygame.init()
+
+# ===================== CONFIG =====================
+CELL = 30
+COLS, ROWS = 10, 20
+SIDE_WIDTH = 220
+WIDTH, HEIGHT = COLS * CELL + SIDE_WIDTH, ROWS * CELL
+FPS = 60
+
+win = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Tetris Điều Khiển Bằng Tay")
+
+FONT = pygame.font.SysFont("Arial", 22, bold=True)
+BIGFONT = pygame.font.SysFont("Arial", 40, bold=True)
+
+COLORS = [
+    (255, 170, 170),
+    (255, 200, 170),
+    (255, 240, 170),
+    (200, 255, 170),
+    (170, 255, 220),
+    (170, 220, 255),
+    (200, 170, 255),
+]
+
+SHAPES = [
+    [[1, 1, 1, 1]],
+    [[1, 0, 0], [1, 1, 1]],
+    [[0, 0, 1], [1, 1, 1]],
+    [[1, 1], [1, 1]],
+    [[0, 1, 1], [1, 1, 0]],
+    [[0, 1, 0], [1, 1, 1]],
+    [[1, 1, 0], [0, 1, 1]]
+]
+
+# ===================== CAMERA CONTROL =====================
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(max_num_hands=1)
+cap = cv2.VideoCapture(0)
+
+last_action = None
+camera_surface = None
+action_start_time = 0
+STABLE_TIME = 0.5
+display_text = ""
+
+
+def get_action():
+    global last_action, camera_surface
+    global action_start_time, display_text
+
+    ret, frame = cap.read()
+    if not ret:
+        return None
+
+    frame = cv2.flip(frame, 1)
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    result = hands.process(rgb)
+
+    action = None
+
+    if result.multi_hand_landmarks:
+        hand = result.multi_hand_landmarks[0]
+
+        # ===== VẼ SKELETON =====
+        mp_draw.draw_landmarks(
+            frame,
+            hand,
+            mp_hands.HAND_CONNECTIONS
+        )
+
+        # ===== ĐẾM NGÓN =====
+        fingers = 0
+        tips = [8, 12, 16, 20]
+
+        for tip in tips:
+            if hand.landmark[tip].y < hand.landmark[tip - 2].y:
+                fingers += 1
+
+        # ngón cái
+        if hand.landmark[4].x > hand.landmark[3].x:
+            fingers += 1
+
+        # ===== MAP HÀNH ĐỘNG =====
+        if fingers == 1:
+            action = "RIGHT"
+        elif fingers == 2:
+            action = "LEFT"
+        elif fingers == 0:
+            action = "ROTATE"
+        elif fingers == 5:
+            action = "DOWN"
+
+        display_text = f"{action if action else ''}"
+
+    else:
+        action = None
+        display_text = ""
+
+    # ===== CHỐNG RUNG – GIỮ 0.5s =====
+    current_time = pygame.time.get_ticks() / 1000  # giây
+
+    if action != last_action:
+        last_action = action
+        action_start_time = current_time
+        return None
+
+    if action and (current_time - action_start_time) >= STABLE_TIME:
+        action_start_time = current_time
+        return action
+
+    # ===== CAMERA VIEW =====
+    small = cv2.resize(frame, (180, 140))
+
+    if display_text:
+        cv2.putText(
+            small,
+            display_text,
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 255, 0),
+            2
+        )
+
+    small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+    camera_surface = pygame.surfarray.make_surface(np.rot90(small))
+
+    return None
+
+
+# ===================== GAME HELPERS =====================
+def rotate(shape):
+    return [list(row) for row in zip(*shape[::-1])]
+
+def valid(board, shape, x, y):
+    for r in range(len(shape)):
+        for c in range(len(shape[0])):
+            if shape[r][c]:
+                nx, ny = x + c, y + r
+                if nx < 0 or nx >= COLS or ny >= ROWS:
+                    return False
+                if ny >= 0 and board[ny][nx] != -1:
+                    return False
+    return True
+
+def lock_shape(board, shape, x, y, color):
+    for r in range(len(shape)):
+        for c in range(len(shape[0])):
+            if shape[r][c]:
+                board[y + r][x + c] = color
+
+def clear_rows(board):
+    removed = 0
+    r = ROWS - 1
+    while r >= 0:
+        if -1 not in board[r]:
+            del board[r]
+            board.insert(0, [-1] * COLS)
+            removed += 1
+        else:
+            r -= 1
+    return removed
+
+def draw_cell(x, y, color):
+    pygame.draw.rect(win, color, (x, y, CELL, CELL))
+    pygame.draw.rect(win, (255, 255, 255), (x, y, CELL, CELL), 1)
+
+def draw_board(board):
+    for r in range(ROWS):
+        for c in range(COLS):
+            if board[r][c] != -1:
+                draw_cell(c * CELL, r * CELL, COLORS[board[r][c]])
+
+def draw_piece(shape, x, y, color):
+    for r in range(len(shape)):
+        for c in range(len(shape[0])):
+            if shape[r][c]:
+                draw_cell((x + c) * CELL, (y + r) * CELL, color)
+
+def draw_sidebar(score):
+    pygame.draw.rect(win, (30, 30, 50), (COLS * CELL, 0, SIDE_WIDTH, HEIGHT))
+    win.blit(FONT.render("SCORE", True, (255, 255, 255)), (COLS * CELL + 20, 20))
+    win.blit(FONT.render(str(score), True, (255, 255, 255)), (COLS * CELL + 20, 50))
+
+    win.blit(FONT.render("CAMERA", True, (255, 255, 255)), (COLS * CELL + 20, 100))
+    pygame.draw.rect(win, (200, 200, 200),
+                     (COLS * CELL + 20, 130, 180, 140), 2)
+
+    if camera_surface:
+        win.blit(camera_surface, (COLS * CELL + 20, 130))
+
+# ===================== GAME LOOP =====================
+def game_loop():
+    board = [[-1] * COLS for _ in range(ROWS)]
+    clock = pygame.time.Clock()
+
+    current = random.choice(SHAPES)
+    color = random.randint(0, 6)
+    x, y = 3, 0
+    score = 0
+    fall_time = 0
+
+    running = True
+    while running:
+        dt = clock.tick(FPS)
+        fall_time += dt
+
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                cap.release()
+                pygame.quit()
+                sys.exit()
+
+        cam = get_action()
+        if cam == "LEFT" and valid(board, current, x - 1, y):
+            x -= 1
+        elif cam == "RIGHT" and valid(board, current, x + 1, y):
+            x += 1
+        elif cam == "ROTATE":
+            r = rotate(current)
+            if valid(board, r, x, y):
+                current = r
+        elif cam == "DOWN" and valid(board, current, x, y + 1):
+            y += 1
+
+        if fall_time > 600:
+            fall_time = 0
+            y += 1
+            if not valid(board, current, x, y):
+                y -= 1
+                lock_shape(board, current, x, y, color)
+                score += clear_rows(board) * 100
+                current = random.choice(SHAPES)
+                color = random.randint(0, 6)
+                x, y = 3, 0
+
+        win.fill((20, 20, 30))
+        draw_board(board)
+        draw_piece(current, x, y, COLORS[color])
+        draw_sidebar(score)
+
+        pygame.display.update()
+
+# ===================== START =====================
+if __name__ == "__main__":
+    game_loop()

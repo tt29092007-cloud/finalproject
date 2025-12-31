@@ -1,0 +1,26 @@
+Phan Bá Thành( trưởng nhóm) 
+Các nhiệm vụ chính:
+ Lên ý tưởng gameplay, luật chơi, mức độ khó. 
+Phụ viết báo cáo: phần Mục tiêu & Giới thiệu. 
+Hỗ trợ kiểm thử game.
+Trần Văn Trung (thành viên nhóm)
+Các nhiệm vụ chính:
+Code logic rơi gạch, xoay gạch, di chuyển trái phải. 
+Xử lý va chạm giữa gạch và map. 
+Code xoá hàng, cộng điểm.
+Trần Hữu Trường (thành viên nhóm)
+Các nhiệm vụ chính:
+  Code giao diện game (UI): khung chơi, màu gạch, score box… 
+Render từng block, vẽ bảng 2D. 
+Tối ưu FPS, xử lý camera
+Nguyễn Đức Hào (thành viên nhóm)
+Nhiệm vụ chính:
+Code Menu, Pause Game, Game Over screen.
+Thêm âm thanh, hiệu ứng khi xoá hàng.
+Hỗ trợ kiểm thử và sửa bug.
+Nguyễn Nhật Anh (thành viên nhóm)
+Các nhiệm vụ chính:
+Làm slide Canva, thiết kế hình ảnh. 
+Soạn báo cáo.
+Chuẩn bị bài nói.
+xử lý camera
